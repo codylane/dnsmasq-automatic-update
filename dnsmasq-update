@@ -1,0 +1,14 @@
+#!/bin/bash
+###########################################################################
+# Author: Cody Lane
+# Date: 4-15-2015
+#
+# Description:
+# This script is a wrapper script used to fork off our dnsmasq detector
+# in the background like an init script.
+###########################################################################
+
+export RUN_USER="root"
+export RUN_CMD="$PWD/detect-update"
+
+$PWD/initwrapper "$1"

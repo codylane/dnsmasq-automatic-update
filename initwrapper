@@ -1,0 +1,70 @@
+#!/bin/bash
+########################################################################
+# Author: Cody Lane
+# Date: 4-15-2015
+#
+# Description:
+# A utility script that can be used to start up an application via an
+# init script.
+########################################################################
+
+err() {
+  echo "ERR: $* exiting"
+  exit 1
+}
+
+[ -z "$RUN_USER" ] && err "You must set the variable RUN_USER before callign this script"
+[ -z "$RUN_CMD" ] && err "You must set the variable RUN_CMD before calling this script"
+
+status() {
+        PIDS=$(pgrep -f "$RUN_CMD")
+        [ -z "$PIDS" ] && return 3
+        return 0
+}
+
+start() {
+        status
+        if [ $? -ne 0 ]; then
+                su -l "$RUN_USER" -s /bin/bash -c "$RUN_CMD 2>&1 &"
+                return $?
+        fi
+        return 0
+}
+
+stop() {
+        status
+        if [ $? -eq 0 ]; then
+                kill $PIDS
+                return $?
+        fi
+        return 0
+}
+
+restart() {
+    stop
+    sleep 1
+    start
+}
+
+case "$1" in
+        start)
+                start
+        ;;
+
+        status)
+                status
+        ;;
+
+        stop)
+                stop
+        ;;
+
+        restart)
+            restart
+        ;;
+
+        *)
+        echo "$0 [start|status|stop|restart]"
+        exit 0
+        ;;
+esac

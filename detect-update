@@ -1,0 +1,86 @@
+#!/bin/bash
+##################################################################
+# Author: Cody Lane
+# Date: 4-15-2015
+#
+# Description:
+# A cool little script that automatically updates DNS entries if
+# using dnsmasq.  This is espically useful for docker based
+# environments.
+##################################################################
+
+function ilog() {
+  echo "[INFO] $*"
+}
+
+function elog() {
+  echo "[ERROR] $*"
+}
+
+function err() {
+  echo "ERR: $* exiting"
+  exit 1
+}
+
+function get-containers() {
+  CONTAINERS=$(docker ps -a | grep -v "CONTAINER" | grep -v ' Exited ' | awk '{print $1}')
+}
+
+function get-container-ipaddress() {
+    docker inspect -f '{{.NetworkSettings.IPAddress}}' "$1" 2>>/dev/null | grep -v 'no value'
+}
+
+function get-container-name() {
+  docker inspect -f '{{.Name}}' "$1"  | sed -e 's/^\///g'
+}
+
+function update-dns-record() {
+  ilog "Updating DNS record... And signaling dnsmasq restart"
+  echo "host-record=$1,$2" > "$DNS_DIR/0host_$1"
+  RESTART_DNSMASQ="1"
+}
+
+function check-for-update() {
+  if [ -n "$CONTAINER_IP" ] && [ -n "$CONTAINER_NAME" ]; then
+
+    if [ -f "$DNS_DIR/0host_$CONTAINER_NAME" ]; then
+      grep "$CONTAINER_IP" "$DNS_DIR/0host_$CONTAINER_NAME" >>/dev/null 2>&1
+      [ $? -ne 0 ] && update-dns-record "$CONTAINER_NAME" "$CONTAINER_IP"
+    else
+      update-dns-record "$CONTAINER_NAME" "$CONTAINER_IP"
+    fi
+
+  fi
+}
+
+
+## main ##
+
+[ "$(whoami)" != "root" ] && err "You must run this script as root"
+
+## GLOBALS ##
+DNS_DIR="/opt/docker/dnsmasq.d"
+
+[ ! -d "$DNS_DIR" ] && mkdir -p "$DNS_DIR"
+
+get-containers
+
+while true
+do
+  for CONTAINER in $CONTAINERS
+  do
+    CONTAINER_IP=$(get-container-ipaddress "$CONTAINER")
+    CONTAINER_NAME=$(get-container-name "$CONTAINER")
+
+    check-for-update
+  done
+
+  if [ -n "$RESTART_DNSMASQ" ]; then
+    ilog "Restarting DNSMASQ"
+    service dnsmasq restart
+    [ $? -eq 0 ] && ilog "Restart successufl" || elog "Restart failed"
+    unset RESTART_DNSMASQ
+  fi
+
+  get-containers
+done
